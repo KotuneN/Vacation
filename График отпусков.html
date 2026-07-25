@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>График отпусков</title>
+
+    <!-- Библиотека для чтения Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+      :root {
+        --bg: #f5f7fa;
+        --white: #fff;
+        --gray: #ddd;
+        --border: #ccc;
+        --green: #2ecc71;
+        --red: #e74c3c;
+        --pale-red: #ffe0e0;
+        --conflict-border: #c0392b;
+        --text: #333;
+      }
+
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        margin: 0;
+        padding: 1.5rem;
+        color: var(--text);
+        background: var(--bg);
+      }
+
+      h1 {
+        margin: 0 0 1.5rem 0;
+      }
+
+      /* Панель управления */
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+        background: var(--white);
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        margin-bottom: 1.5rem;
+      }
+
+      select,
+      button,
+      input[type="file"] {
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        cursor: pointer;
+      }
+
+      button {
+        background: #2c3e50;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+      }
+
+      button:hover {
+        background: #34495e;
+      }
+
+      button.green {
+        background: #27ae60;
+      }
+
+      /* Статистика по отделам */
+      #loadStats {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .dept-stat-card {
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+
+      .dept-stat-card h3 {
+        margin: 0 0 0.5rem 0;
+        font-size: 15px;
+        color: #2c3e50;
+      }
+
+      .dept-stat-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        line-height: 1.4;
+        margin: 0.25rem 0;
+      }
+
+      .dept-stat-value {
+        font-weight: 700;
+        color: #2c3e50;
+      }
+
+      .pct-danger {
+        color: var(--red);
+        font-weight: bold;
+      }
+
+      .pct-warning {
+        color: #f39c12;
+        font-weight: bold;
+      }
+
+      .pct-ok {
+        color: var(--green);
+      }
+
+      /* Легенда */
+      .legend {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+      }
+
+      .badge {
+        display: inline-block;
+        height: 16px;
+        width: 16px;
+        vertical-align: middle;
+        margin-right: 0.3rem;
+      }
+
+      /* Таблица и прокрутка */
+      .year-view-wrapper {
+        overflow-x: auto;
+      }
+
+      table {
+        border-spacing: 0;
+        width: 100%;
+        background: var(--white);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        min-width: 1200px;
+      }
+
+      th,
+      td {
+        border-right: 1px solid var(--gray);
+        border-bottom: 1px solid var(--gray);
+        padding: 0;
+        text-align: center;
+        min-width: 24px;
+        position: relative;
+        font-size: 12px;
+        height: 32px;
+        box-sizing: border-box;
+      }
+
+      tr:first-child th {
+        border-top: 1px solid var(--gray);
+      }
+
+      td:first-child,
+      th:first-child {
+        border-left: 1px solid var(--border);
+      }
+
+      .weekend-or-holiday-label {
+        color: #851c1c;
+        background-color: #ffe6e6 !important;
+      }
+
+      .vacation-cell {
+        background: var(--green);
+        color: #fff;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 14px;
+        line-height: 1;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      .conflict {
+        background-color: var(--pale-red) !important;
+        position: relative;
+        z-index: 10;
+        border: 1px solid var(--conflict-border) !important;
+	border-radius: 4px;
+      }
+
+      .conflict .vacation-cell {
+        background: rgba(255, 255, 255, 0.8);
+        color: var(--red);
+        border: none;
+        box-shadow: none;
+      }
+
+      .month-label {
+        font-weight: bold;
+        color: #2c3e50;
+        margin: 0.5rem 0;
+      }
+
+      .note {
+        font-size: 0.85rem;
+        color: #666;
+        margin-top: 1rem;
+      }
+
+      .status-message {
+        padding: 1rem;
+        background: #e3f2fd;
+        border: 1px dashed #2196f3;
+        border-radius: 6px;
+        color: #1565c0;
+        margin-bottom: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>График отпусков</h1>
+
+    <div id="statusBox" class="status-message">
+      Данные ещё не загружены. Нажмите «Загрузить график из файла» и выберите Excel‑файл.
+    </div>
+
+    <!-- Панель статистики -->
+    <div id="loadStats" style="display: none;"></div>
+
+    <div class="controls">
+      <label>
+        Отдел:
+        <select id="deptFilter" onchange="onDeptChange()" disabled>
+          <option value="all">Все отделы</option>
+        </select>
+      </label>
+
+      <label>
+        Месяц:
+        <select id="monthFilter" onchange="render()">
+          <option value="all">Все месяцы</option>
+          <option value="0">Январь</option>
+          <option value="1">Февраль</option>
+          <option value="2">Март</option>
+          <option value="3">Апрель</option>
+          <option value="4">Май</option>
+          <option value="5">Июнь</option>
+          <option value="6">Июль</option>
+          <option value="7">Август</option>
+          <option value="8">Сентябрь</option>
+          <option value="9">Октябрь</option>
+          <option value="10">Ноябрь</option>
+          <option value="11">Декабрь</option>
+        </select>
+      </label>
+
+      <input type="file" id="excelFileInput" accept=".xlsx,.xls" title="Выберите Excel‑файл" />
+      <button onclick="handleFileUpload()" class="green">Загрузить график</button>
+    </div>
+
+    <div class="legend">
+      <span>
+        <span class="badge" style="background: #ffe6e6; border: 1px solid #ccc"></span>
+        Выходной или праздник
+      </span>
+      <span>
+        <span class="badge" style="background: var(--green)"></span>
+        Отпуск сотрудника
+      </span>
+      <span>
+        <span class="badge" style="background: var(--pale-red); border: 1px solid var(--conflict-border)"></span>
+        Конфликт (2+ в отделе)
+      </span>
+    </div>
+
+    <div class="year-view-wrapper"></div>
+
+    <p class="note">
+      <strong>Как это работает:</strong><br />
+      1. Загрузите файл с данными о отпуске сотрудников со следующими столбцами — ФИО, Отдел, Дата начала, Дата окончания.<br />
+      2. При пересечении отпуска у сотрудников из одного отдела, клетка окрашивается в красный.<br />
+      3. При обновлении страницы загруженный файл сбросица, для возвращения информации сделайте пункт 1.
+    </p>
+
+    <script>
+      // Глобальные данные
+      let data = {}; // Храним как объект по ключу name|dept
+      let deptTotal = {};
+
+      const holidays = new Set([
+        "2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05",
+        "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09",
+        "2026-02-23", "2026-03-09", "2026-05-01", "2026-05-11",
+        "2026-06-12", "2026-11-04", "2026-12-31"
+      ]);
+
+      const monthNames = [
+        'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+        'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+      ];
+
+      // --- Вспомогательные функции ---
+
+      function getDaysInMonth(year, month) {
+        return new Date(year, month + 1, 0).getDate();
+      }
+
+      function startOfDay(date) {
+        const d = new Date(date);
+        d.setHours(0, 0, 0, 0);
+        return d;
+      }
+
+      function parseDateDMY(val) {
+        if (!val) return null;
+        if (val instanceof Date) return startOfDay(val);
+
+        // Excel-формат (число дней от 1899-12-30)
+        if (typeof val === 'number') {
+          const epoch = new Date(1899, 11, 30);
+          return startOfDay(new Date(epoch.getTime() + val * 86400000));
+        }
+
+        const s = String(val).trim();
+
+        // ISO формат YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          return startOfDay(new Date(s));
+        }
+
+        // DD.MM.YYYY или DD/MM/YYYY
+        const m = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/);
+        if (m) {
+          return startOfDay(new Date(+m[3], +m[2] - 1, +m[1]));
+        }
+
+        return null;
+      }
+
+      function isHoliday(date) {
+        const y = date.getFullYear().toString().padStart(4, '0');
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const d = date.getDate().toString().padStart(2, '0');
+        return holidays.has(`${y}-${m}-${d}`);
+      }
+
+      // --- Загрузка и обработка файла ---
+
+      function handleFileUpload() {
+        const fileInput = document.getElementById('excelFileInput');
+        const files = fileInput?.files;
+
+        if (!files || files.length === 0) {
+          alert('Пожалуйста, выберите файл Excel.');
+          return;
+        }
+
+        const file = files[0];
+        const ext = file.name.toLowerCase().split('.').pop();
+        if (ext !== 'xlsx' && ext !== 'xls') {
+          alert('Неверный формат файла. Поддерживаются только .xlsx и .xls.');
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const arr = new Uint8Array(e.target.result);
+            const wb = XLSX.read(arr, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(ws);
+
+            if (!rows || rows.length === 0) {
+              alert('Файл загружен, но в нём нет данных. Проверьте таблицу.');
+              return;
+            }
+
+            data = rows
+              .map(r => ({
+                name: r['Name'] || r['Имя'] || r['ФИО'] || 'Неизвестно',
+                dept: r['Department'] || r['Отдел'] || r['Подразделение'] || 'Без отдела',
+                start: parseDateDMY(r['Start'] || r['Начало'] || r['Дата начала']),
+                end: parseDateDMY(r['End'] || r['Конец'] || r['Дата окончания'])
+              }))
+              .filter(r => r.start && r.end)
+              .reduce((acc, r) => {
+                const key = `${r.name}|${r.dept}`;
+                if (!acc[key]) {
+                  acc[key] = { name: r.name, dept: r.dept, periods: [] };
+                }
+                acc[key].periods.push({ start: r.start, end: r.end });
+                return acc;
+              }, {});
+
+            deptTotal = {};
+            Object.values(data).forEach(row => {
+              deptTotal[row.dept] = (deptTotal[row.dept] || 0) + 1;
+            });
+
+            populateDeptFilter();
+            render();
+            document.getElementById('statusBox').style.display = 'none';
+          } catch (err) {
+            console.error(err);
+            alert('Ошибка чтения файла. Проверьте структуру Excel.');
+          }
+        };
+
+        reader.onerror = e => {
+          console.error(e);
+          alert('Ошибка чтения файла.');
+        };
+
+        reader.readAsArrayBuffer(file);
+      }
+
+      function populateDeptFilter() {
+        const sel = document.getElementById('deptFilter');
+        sel.disabled = false;
+        sel.innerHTML = '<option value="all">Все отделы</option>';
+
+        const uniqueDepts = Object.values(data)
+          .map(x => x.dept)
+          .filter((v, i, arr) => arr.indexOf(v) === i)
+          .sort();
+
+        uniqueDepts.forEach(d => {
+          const o = document.createElement('option');
+          o.value = o.textContent = d;
+          sel.appendChild(o);
+        });
+      }
+
+           // --- Логика фильтров ---
+
+      function updateMonthFilterByDept(deptFilterValue) {
+        const year = new Date().getFullYear();
+        const monthsPresent = new Set();
+
+        Object.values(data).forEach(row => {
+          if (deptFilterValue !== 'all' && row.dept !== deptFilterValue) return;
+
+          row.periods.forEach(p => {
+            const cur = new Date(p.start);
+            while (cur <= p.end) {
+              monthsPresent.add(cur.getMonth());
+              cur.setDate(cur.getDate() + 1);
+            }
+          });
+        });
+
+        const monthSel = document.getElementById('monthFilter');
+        const currentMonth = monthSel.value;
+
+        monthSel.innerHTML = '';
+        const allOption = document.createElement('option');
+        allOption.value = 'all';
+        allOption.textContent = 'Все месяцы';
+        monthSel.appendChild(allOption);
+
+        for (let m = 0; m < 12; m++) {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = monthNames[m];
+
+          if (deptFilterValue !== 'all' && !monthsPresent.has(m)) {
+            opt.disabled = true;
+            opt.style.opacity = '0.5';
+          }
+
+          monthSel.appendChild(opt);
+        }
+
+        if (currentMonth !== 'all') {
+          const opt = monthSel.querySelector(`option[value="${currentMonth}"]`);
+          if (opt && !opt.disabled) {
+            monthSel.value = currentMonth;
+          } else {
+            monthSel.value = 'all';
+          }
+        } else {
+          monthSel.value = 'all';
+        }
+      }
+
+      function onDeptChange() {
+        updateMonthFilterByDept(document.getElementById('deptFilter').value);
+        render();
+      }
+
+      // --- Вспомогательные проверки дат ---
+
+      function hasVacationInMonth(monthIdx, year, periods) {
+        const first = startOfDay(new Date(year, monthIdx, 1));
+        const last = startOfDay(new Date(year, monthIdx + 1, 0));
+        return periods.some(p => !(p.end < first || p.start > last));
+      }
+
+      function isDayInAnyPeriod(date, periods) {
+        for (const p of periods) {
+          if (date >= p.start && date <= p.end) return true;
+        }
+        return false;
+      }
+
+      // --- Расчёт статистики по отделам ---
+
+      function calcDeptLoadStats(deptFilterValue, monthFilterValue, year) {
+        const months = monthFilterValue === 'all'
+          ? Array.from({ length: 12 }, (_, i) => i)
+          : [parseInt(monthFilterValue, 10)];
+
+        const stats = {};
+        const monthlyConflictCounts = {}; // { dept: { monthIdx: count } }
+
+        months.forEach(m => {
+          const days = getDaysInMonth(year, m);
+          for (let d = 1; d <= days; d++) {
+            const date = startOfDay(new Date(year, m, d));
+            const deptCounts = {};
+
+            Object.values(data).forEach(row => {
+              if (deptFilterValue !== 'all' && row.dept !== deptFilterValue) return;
+              if (!hasVacationInMonth(m, year, row.periods)) return;
+              if (!isDayInAnyPeriod(date, row.periods)) return;
+
+              deptCounts[row.dept] = (deptCounts[row.dept] || 0) + 1;
+            });
+
+            Object.entries(deptCounts).forEach(([dept, count]) => {
+              if (!stats[dept]) {
+                stats[dept] = {
+                  total: deptTotal[dept] || 1,
+                  conflictDays: 0,
+                  maxConcurrent: 0
+                };
+                monthlyConflictCounts[dept] = {};
+              }
+
+              if (count >= 2) {
+                stats[dept].conflictDays++;
+                monthlyConflictCounts[dept][m] = (monthlyConflictCounts[dept][m] || 0) + 1;
+              }
+
+              if (count > stats[dept].maxConcurrent) {
+                stats[dept].maxConcurrent = count;
+              }
+            });
+          }
+        });
+
+        const totalDays = months.reduce((sum, m) => sum + getDaysInMonth(year, m), 0);
+        Object.values(stats).forEach(s => {
+          s.percent = totalDays > 0 ? Math.round((s.conflictDays / totalDays) * 100) : 0;
+        });
+
+        // Определение самого загруженного месяца для каждого отдела
+        Object.keys(monthlyConflictCounts).forEach(dept => {
+          const monthCounts = monthlyConflictCounts[dept];
+          let maxCount = -1;
+          let busiestMonthIdx = null;
+
+          Object.keys(monthCounts).forEach(mStr => {
+            const m = parseInt(mStr, 10);
+            const count = monthCounts[m];
+            if (count > maxCount) {
+              maxCount = count;
+              busiestMonthIdx = m;
+            }
+          });
+
+          if (busiestMonthIdx !== null) {
+            stats[dept].busiestMonth = monthNames[busiestMonthIdx];
+            stats[dept].busiestMonthCount = maxCount;
+          } else {
+            stats[dept].busiestMonth = 'Отсутствует';
+            stats[dept].busiestMonthCount = 0;
+          }
+        });
+
+        return stats;
+      }
+
+      // --- Отрисовка статистики ---
+
+      function renderLoadStats(deptFilterValue, monthFilterValue, year) {
+        const container = document.getElementById('loadStats');
+        if (!container) return;
+
+        const stats = calcDeptLoadStats(deptFilterValue, monthFilterValue, year);
+        const depts = Object.keys(stats).sort();
+
+        if (depts.length === 0) {
+          container.style.display = 'none';
+          return;
+        }
+
+        container.style.display = 'grid';
+        let html = '';
+
+        depts.forEach(dept => {
+          const s = stats[dept];
+          const percent = s.percent;
+          let colorClass = 'pct-ok';
+          if (percent >= 30) colorClass = 'pct-warning';
+          if (percent >= 50) colorClass = 'pct-danger';
+
+          const showBusiest = monthFilterValue === 'all';
+
+          html += `
+            <div class="dept-stat-card">
+              <h3>${dept}</h3>
+              <div class="dept-stat-row">
+                <span>Всего сотрудников</span>
+                <span class="dept-stat-value">${s.total}</span>
+              </div>
+              <div class="dept-stat-row">
+                <span>Дней с пересечением (≥2)</span>
+                <span class="dept-stat-value">${s.conflictDays}</span>
+              </div>
+              <div class="dept-stat-row">
+                <span>Макс. одновременно в отпуске</span>
+                <span class="dept-stat-value">${s.maxConcurrent}</span>
+              </div>
+              <div class="dept-stat-row">
+                <span>Доля конфликтных дней</span>
+                <span class="dept-stat-value ${colorClass}">${percent}%</span>
+              </div>`;
+
+          if (showBusiest) {
+            let busiestText = `${s.busiestMonth} (${s.busiestMonthCount} дн.)`;
+            let busiestColorStyle = 'color: var(--red); font-weight: bold;';
+
+            if (s.busiestMonthCount === 0 || s.busiestMonth === 'Отсутствует') {
+              busiestText = 'Отсутствует';
+              busiestColorStyle = 'color: var(--green); font-weight: bold;';
+            }
+
+            html += `
+              <div class="dept-stat-row" style="margin-top: 0.5rem; border-top: 1px solid var(--gray); padding-top: 0.5rem;">
+                <span>Загруженный месяц</span>
+                <span class="dept-stat-value" style="${busiestColorStyle}">
+                  ${busiestText}
+                </span>
+              </div>`;
+          }
+
+          html += `
+            </div>
+          `;
+        });
+
+        container.innerHTML = html;
+      }
+
+      // --- Отрисовка таблицы по месяцам/году ---
+
+      function renderYearView(rows, monthFilterValue, year) {
+        const wrapper = document.querySelector('.year-view-wrapper');
+        wrapper.innerHTML = '';
+
+        const months = monthFilterValue === 'all'
+          ? Array.from({ length: 12 }, (_, i) => i)
+          : [parseInt(monthFilterValue, 10)];
+
+        months.forEach(m => {
+          const days = getDaysInMonth(year, m);
+          let html = `<div class="month-label">${monthNames[m]} ${year}</div><table><thead><tr><th style="width:200px">Сотрудник / Отдел</th>`;
+
+          for (let d = 1; d <= days; d++) {
+            const date = startOfDay(new Date(year, m, d));
+            const isWeekend = [0, 6].includes(date.getDay());
+            const cellClass = isHoliday(date) || isWeekend
+              ? 'weekend-or-holiday-label'
+              : '';
+            html += `<th class="${cellClass}">${d}</th>`;
+          }
+          html += `</tr></thead><tbody>`;
+
+          // Предварительный подсчёт конфликтов по дням и отделам
+          const dayDeptCounts = {};
+          const allDays = [];
+
+          for (let d = 1; d <= days; d++) {
+            const date = startOfDay(new Date(year, m, d));
+            allDays.push(date);
+            const ymd = date.toISOString().split('T')[0];
+
+            rows.forEach(row => {
+              if (!hasVacationInMonth(m, year, row.periods)) return;
+              if (!isDayInAnyPeriod(date, row.periods)) return;
+
+              const key = `${ymd}|${row.dept}`;
+              dayDeptCounts[key] = (dayDeptCounts[key] || 0) + 1;
+            });
+          }
+
+          rows.forEach(row => {
+            if (!hasVacationInMonth(m, year, row.periods)) return;
+
+            html += `<tr><td><strong>${row.name}</strong><br><small>${row.dept}</small></td>`;
+            for (let d = 1; d <= days; d++) {
+              const date = allDays[d - 1];
+              const ymd = date.toISOString().split('T')[0];
+              const hasVac = isDayInAnyPeriod(date, row.periods);
+              const cellClassArr = [];
+              let cellContent = '';
+
+              if (hasVac) {
+                const key = `${ymd}|${row.dept}`;
+                if (dayDeptCounts[key] >= 2) {
+                  cellClassArr.push('conflict');
+                  cellContent = '<div style="color:var(--red); font-weight:700; font-size: 14px;">О</div>';
+                } else {
+                  cellContent = '<div class="vacation-cell">О</div>';
+                }
+              } else {
+                cellContent = '';
+              }
+
+              html += `<td class="${cellClassArr.join(' ')}">${cellContent}</td>`;
+            }
+            html += `</tr>`;
+          });
+
+          html += `</tbody></table>`;
+          wrapper.innerHTML += html;
+        });
+      }
+
+      // --- Основная функция отрисовки ---
+
+      function render() {
+        const deptVal = document.getElementById('deptFilter').value;
+        const monthVal = document.getElementById('monthFilter').value;
+        const year = new Date().getFullYear();
+
+        const filtered = Object.values(data).filter(row => {
+          if (deptVal !== 'all' && row.dept !== deptVal) return false;
+          if (monthVal === 'all') {
+            const firstYear = startOfDay(new Date(year, 0, 1));
+            const lastYear = startOfDay(new Date(year, 11, 31));
+            return row.periods.some(p => !(p.end < firstYear || p.start > lastYear));
+          } else {
+            const m = parseInt(monthVal, 10);
+            return hasVacationInMonth(m, year, row.periods);
+          }
+        });
+
+        renderLoadStats(deptVal, monthVal, year);
+        renderYearView(filtered, monthVal, year);
+      }
+    </script>
+  </body>
+</html>
+
