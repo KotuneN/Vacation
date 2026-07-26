@@ -617,8 +617,8 @@
           const s = stats[dept];
           const percent = s.percent;
           let colorClass = 'pct-ok';
-          if (percent >= 30) colorClass = 'pct-warning';
-          if (percent >= 50) colorClass = 'pct-danger';
+          if (percent >= 10) colorClass = 'pct-warning';
+          if (percent >= 40) colorClass = 'pct-danger';
 
           const showBusiest = monthFilterValue === 'all';
 
